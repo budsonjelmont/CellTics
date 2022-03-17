@@ -369,7 +369,7 @@ def get_id(variant):
     return '{}_{}_{}_{}'.format(variant.CHROM, variant.POS, variant.REF, variant.ALT[0])
 
 
-def merge_records(variants, group_id, seq_dict=None):
+def merge_records(variants, group_id, seq_dict=None, datasource=None):
     """
     merge one list of variants
     """
@@ -379,7 +379,7 @@ def merge_records(variants, group_id, seq_dict=None):
     start = min([variant.POS for variant in variants])
     info = variants[0].INFO
     end = max([variant.end for variant in variants])
-    ref = get_reference_seq(chrom, start, end, seq_dict)
+    ref = get_reference_seq(chrom, start, end, seq_dict, datasource)
     alt = ref
 
     agg_qual, agg_alt_af, agg_alt_dp, agg_ref_dp = 0, 0, 0, 0
@@ -387,6 +387,7 @@ def merge_records(variants, group_id, seq_dict=None):
     for variant in sorted(variants, key=lambda var: int(var.POS)):
         var_len = variant.end - variant.POS + 1
         var_alt = [sub.sequence for sub in variant.ALT]
+        print(variant)
         if variant.is_deletion:
             del_length = variant.end - variant.POS
             alt = alt[:shift + variant.POS - start] + "".join(var_alt) + \
@@ -421,7 +422,7 @@ def append_group_info(record, groups):
     return record
 
 
-def get_reference_seq(chrom, start, end, seq_dict=None):
+def get_reference_seq(chrom, start, end, seq_dict=None, datasource=None):
     """
        Lookup in local full genome fasta file to return reference sequence
        :param chrom:
@@ -430,7 +431,8 @@ def get_reference_seq(chrom, start, end, seq_dict=None):
        :return: dna reference sequence
     """
     if not seq_dict:
-        return get_reference_seq_ucsc(chrom, start, end)
+        if datasource:
+          return datasource.get_reference_seq(datasource.get_chrom_alias(chrom), start, end)
     # ex. start = 1, end = 3, return [0,1,2]
     # because computer scientists are exclusive starting from 0 but biologists are inclusive starting from 1
     start = int(start) - 1
@@ -439,29 +441,9 @@ def get_reference_seq(chrom, start, end, seq_dict=None):
     except IndexError as e:
         raise Exception("Error: Could not find that sequence: %s" % str(e))
     except KeyError as e:
-        print("No chromosome named: %s\nTrying UCSC..." % str(e))
-        dna = get_reference_seq(chrom, start, end)
+        print("No chromosome named: %s\nTrying external data sources..." % str(e))
+        dna = get_reference_seq(chrom, start, end, datasource)
     return dna.lower()
-
-
-def get_reference_seq_ucsc(chrom, start, end):
-    """
-    UCSC http request to return reference sequence
-    :param chrom:
-    :param start:
-    :param end:
-    :return: dna reference sequence
-    """
-    if chrom.startswith('chr'):
-        chrom = chrom.replace('chr', '')
-    request = 'http://genome.ucsc.edu/cgi-bin/das/hg19/dna?segment=chr{}:{},{}'.format(chrom, start, end)
-    try:
-        dna = xmltodict.parse(urlopen(request).read())['DASDNA']['SEQUENCE']['DNA']['#text'].replace('\n', '')
-    except (URLError, ExpatError) as e:
-        print('Could not open UCSC url.  Please check your internet connection.\n{}\n{}'.format(request, e.message))
-        dna = "n" * (start - end)
-    return dna
-
 
 def parse_vcf(reader, merge_distance, skip_overlap):
     """ Read through a sorted VCF file and aggregate candidates for variant merging """
@@ -529,23 +511,23 @@ def get_ref_seq_dict(ref_seq):
     return SeqIO.to_dict(SeqIO.parse(ref_seq, 'fasta')) if ref_seq else None
 
 
-def get_merged_records(variant_dict, fdict):
+def get_merged_records(variant_dict, fdict, datasource):
     """
         Return merged variant calls
     """
     records = []
     for var in variant_dict:
-        record = merge_records(variant_dict[var], var, seq_dict=fdict)
+        record = merge_records(variant_dict[var], var, seq_dict=fdict, datasource=datasource)
         records.append(record)
     return records
 
 
-def bam_and_merge(bam_file, vars_to_group, fq_threshold, min_reads, filter_type, fdict):
+def bam_and_merge(bam_file, vars_to_group, fq_threshold, min_reads, filter_type, fdict, datasource):
     """ inspect bam and merge records """
     if bam_file is not None:
         print('Processing bam: {}'.format(bam_file))
         vars_to_group, _ = inspect_bam(bam_file, vars_to_group, fq_threshold, min_reads, filter_type)
-    return PickleMe(get_merged_records(vars_to_group, fdict), vars_to_group)
+    return PickleMe(get_merged_records(vars_to_group, fdict, datasource), vars_to_group)
 
 
 def write_vcf(records, var_dict, output_file, reader, original_variants, write_mode):
@@ -583,7 +565,7 @@ def split_ref_seq(fdict, cloc, nthreads):
 
 # pylint: disable=too-many-locals
 def bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads, bam_filter_mode, ref_seq, nthreads,
-                               debug=False):
+                               debug=False, datasource=None):
     """ Multiprocess inspect bam and merge step together """
     fdict = None
     if ref_seq is not None:
@@ -596,10 +578,10 @@ def bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads,
     if not debug and nthreads > 1:
         pool = mp.Pool(processes=nthreads)
         res = [pool.apply_async(bam_and_merge, args=(bam_file, achunk, fq_threshold, min_reads, bam_filter_mode,
-                                                     ref)) for achunk, ref in zip(var_chunks, refs)]
+                                                     ref, datasource)) for achunk, ref in zip(var_chunks, refs)]
         pool.close()
     else:
-        res = [bam_and_merge(bam_file, achunk, fq_threshold, min_reads, bam_filter_mode, ref)
+        res = [bam_and_merge(bam_file, achunk, fq_threshold, min_reads, bam_filter_mode, ref, datasource)
                for achunk, ref in zip(var_chunks, refs)]
     records = []
     var_dict = {}
@@ -614,7 +596,7 @@ def bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads,
 
 # pylint: disable=too-many-arguments,too-many-locals
 def main(input_file=None, output_file=None, bam_file=None, merge_distance=9, fq_threshold=0, min_reads=3,
-         bam_filter_mode='pagb', write_mode='append', ref_seq=None, threads=None, debug=False):
+         bam_filter_mode='pagb', write_mode='append', ref_seq=None, threads=None, debug=False, datasource=None):
     """the main function"""
     nthreads = mp.cpu_count() if threads is None else min(int(threads), mp.cpu_count())
     print('Grouping file: {}'.format(input_file))
@@ -625,7 +607,7 @@ def main(input_file=None, output_file=None, bam_file=None, merge_distance=9, fq_
         _, vars_to_group = parse_vcf(original_variants, merge_distance, bam_file is None)
         n_candidates = len(vars_to_group)
         records, var_dict = bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads,
-                                                       bam_filter_mode, ref_seq, nthreads, debug)
+                                                       bam_filter_mode, ref_seq, nthreads, debug, datasource)
         write_vcf(records, var_dict, output_file, reader, original_variants, write_mode)
     print("Found %s variants to merge\nRejected groups: %s" % (len(records), n_candidates - len(records)))
 
