@@ -381,26 +381,63 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
     end = max([variant.end for variant in variants])
     ref = get_reference_seq(chrom, start, end, seq_dict, datasource)
     alt = ref
-
+    alt_src = [None for x in range(0,len(alt))] # Initialize empty vector tracking which IDs the alt alleles originated from
+    unmerged = [] # List of variants that failed to merge
     agg_qual, agg_alt_af, agg_alt_dp, agg_ref_dp = 0, 0, 0, 0
+
     shift = 0
+    print("alt:" + str(alt))
     for variant in sorted(variants, key=lambda var: int(var.POS)):
         var_len = variant.end - variant.POS + 1
         var_alt = [sub.sequence for sub in variant.ALT]
-        print(variant)
+        var_id = get_id(variant)
+        print(var_id)
         if variant.is_deletion:
             del_length = variant.end - variant.POS
-            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + \
-                  alt[shift + variant.end - start + len(var_alt[0]):]
-            shift -= del_length
+            # BEGIN new code
+            upstreamsliceix = shift + variant.POS - start
+            downstreamsliceix = shift + variant.end - start + len(var_alt[0])
+            if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
+                print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
+                print("new alt: " + "".join(var_alt))
+                if any(alt_src[upstreamsliceix:downstreamsliceix]):
+                  print("incompatible merge: " + var_id)
+                  unmerged.append(var_id)
+                  continue
+                else:
+                  alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+                  shift -= del_length
+                  alt_src[upstreamsliceix:downstreamsliceix] = var_id
+            # END new code
+#            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + \
+#                  alt[shift + variant.end - start + len(var_alt[0]):]
+#            shift -= del_length
         else:
-            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.POS - start + var_len:]
-            shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
+            # BEGIN new code
+            upstreamsliceix = shift + variant.POS - start 
+            downstreamsliceix = shift + variant.POS - start + var_len 
+            if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
+                print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
+                print("new alt: " + "".join(var_alt))
+                if any(alt_src[upstreamsliceix:downstreamsliceix]):
+                  unmerged.append(var_id)
+                  continue
+                else:
+                  alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+                  shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
+                  alt_src[upstreamsliceix:downstreamsliceix] = var_id
+            # END new code
+#            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.POS - start + var_len:]
+#            shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
         if variant.QUAL is not None:
             agg_qual += variant.QUAL
         agg_alt_af += variant.INFO.get('ALT_AF', 0) or 0
         agg_alt_dp += variant.INFO.get('ALT_DP', 0) or 0
         agg_ref_dp += variant.INFO.get('REF_DP', 0) or 0
+   
+    if unmerged:
+        print('WARNING: could not merge all variants. The following variants were NOT merged:')
+        print(unmerged)
 
     info['ALT_AF'] = agg_alt_af / len(variants)
     info['ALT_DP'] = agg_alt_dp / len(variants)
