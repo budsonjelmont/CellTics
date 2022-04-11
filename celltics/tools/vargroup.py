@@ -386,6 +386,7 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
     agg_qual, agg_alt_af, agg_alt_dp, agg_ref_dp = 0, 0, 0, 0
 
     shift = 0
+    print("ref:" + str(ref))
     print("alt:" + str(alt))
     for variant in sorted(variants, key=lambda var: int(var.POS)):
         var_len = variant.end - variant.POS + 1
@@ -394,20 +395,34 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
         print(var_id)
         if variant.is_deletion:
             del_length = variant.end - variant.POS
+            print('del_length: ' + str(del_length))
             # BEGIN new code
             upstreamsliceix = shift + variant.POS - start
             downstreamsliceix = shift + variant.end - start + len(var_alt[0])
+            print('upstreamsliceix: ' + str(upstreamsliceix))
+            print('downstreamsliceix: ' + str(downstreamsliceix))
+            print('alt_src:')
+            print(alt_src)
+            print(alt_src[upstreamsliceix:downstreamsliceix])
+            if upstreamsliceix < 0: # TODO Could downstreamsliceix be < 0?
+                  print("incompatible merge: " + var_id)
+                  unmerged.append(var_id)
+                  continue
             if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
                 print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
                 print("new alt: " + "".join(var_alt))
+                print
                 if any(alt_src[upstreamsliceix:downstreamsliceix]):
                   print("incompatible merge: " + var_id)
                   unmerged.append(var_id)
                   continue
                 else:
                   alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+                  alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
                   shift -= del_length
-                  alt_src[upstreamsliceix:downstreamsliceix] = var_id
+            else:
+                print('ALT already has this allele')
+                continue
             # END new code
 #            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + \
 #                  alt[shift + variant.end - start + len(var_alt[0]):]
@@ -416,16 +431,28 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
             # BEGIN new code
             upstreamsliceix = shift + variant.POS - start 
             downstreamsliceix = shift + variant.POS - start + var_len 
+            print('upstreamsliceix: ' + str(upstreamsliceix))
+            print('downstreamsliceix: ' + str(downstreamsliceix))
+            if upstreamsliceix < 0:
+                  print("incompatible merge: " + var_id)
+                  unmerged.append(var_id)
+                  continue
             if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
                 print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
                 print("new alt: " + "".join(var_alt))
                 if any(alt_src[upstreamsliceix:downstreamsliceix]):
+                  print("incompatible merge: " + var_id)
                   unmerged.append(var_id)
                   continue
                 else:
+#                  print('old logic alt after:')
+#                  print(alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.end - start + len(var_alt[0]):])
                   alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+                  alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
                   shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
-                  alt_src[upstreamsliceix:downstreamsliceix] = var_id
+            else:
+                print('ALT already has this allele')
+                continue
             # END new code
 #            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.POS - start + var_len:]
 #            shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
@@ -434,10 +461,15 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
         agg_alt_af += variant.INFO.get('ALT_AF', 0) or 0
         agg_alt_dp += variant.INFO.get('ALT_DP', 0) or 0
         agg_ref_dp += variant.INFO.get('REF_DP', 0) or 0
-   
+        print('alt after:')
+        print(alt)
+        print('alt_src after:')
+        print(alt_src)
     if unmerged:
         print('WARNING: could not merge all variants. The following variants were NOT merged:')
         print(unmerged)
+    print('alt_src final:')
+    print(alt_src)
 
     info['ALT_AF'] = agg_alt_af / len(variants)
     info['ALT_DP'] = agg_alt_dp / len(variants)
@@ -472,6 +504,7 @@ def get_reference_seq(chrom, start, end, seq_dict=None, datasource=None):
           return datasource.get_reference_seq(datasource.get_chrom_alias(chrom), start, end)
     # ex. start = 1, end = 3, return [0,1,2]
     # because computer scientists are exclusive starting from 0 but biologists are inclusive starting from 1
+    start_og = start
     start = int(start) - 1
     try:
         dna = str(seq_dict[chrom][start:end].seq)
@@ -479,7 +512,7 @@ def get_reference_seq(chrom, start, end, seq_dict=None, datasource=None):
         raise Exception("Error: Could not find that sequence: %s" % str(e))
     except KeyError as e:
         print("No chromosome named: %s\nTrying external data sources..." % str(e))
-        dna = get_reference_seq(chrom, start, end, datasource)
+        dna = get_reference_seq(chrom, start_og, end, datasource)
     return dna.lower()
 
 def parse_vcf(reader, merge_distance, skip_overlap):

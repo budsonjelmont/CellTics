@@ -103,12 +103,13 @@ class SeqRepo(datasource):
     :param end:
     :return: dna reference sequence
     """
+    # Sequence indexing is 0-based in SeqRepo
+    start = start - 1
     if chrom.startswith('chr'):
         chrom = chrom.replace('chr', '')
     request = '{}/seqrepo/1/sequence/{}?start={}&end={}'.format(self.baseurl, chrom, start, end)
     try:
         dna = urlopen(request).read().decode('utf-8')
-        print(dna)
     except (URLError, ExpatError) as e:
         print('Could not reach SeqRepo REST service. Please check that the service is running.\n{}\n{}'.format(request, str(e)))
         dna = "n" * (start - end)
