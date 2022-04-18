@@ -24,16 +24,15 @@ from celltics.lib import chunks, get_indel_from_cigar
 import time
 import multiprocessing as mp
 
-
 MAX_GROUPED = 200
-
 
 class PickleMe(object):
     """ Errors with the pickle library resulted in the need to remove the CallData objects from vcf.model.Record"""
-    def __init__(self, records, var_dict):
+    def __init__(self, records, skipped, var_dict):
         """ Clean data """
         self.records = [self.flatten(rec) for rec in records]
         self.var_dict = self.get_reverse_dict(var_dict)
+        self.skipped = skipped
 
     @staticmethod
     def get_reverse_dict(variant_groups):
@@ -59,7 +58,7 @@ class PickleMe(object):
     def get_fat(self):
         """ convert data flattened for the pickle library to original version (or close to it) """
         if len(self.records) == 0 or self.records[0].FORMAT is None:
-            return self.records, self.var_dict
+            return self.records, self.var_dict, self.skipped
         fields = [fld for fld in self.records[0].FORMAT.split(':')]
         calldata = vcf.model.make_calldata_tuple(fields)
         args = ['./.']
@@ -67,7 +66,7 @@ class PickleMe(object):
         cd_obj = calldata(*args)
         for rec in self.records:
             rec.samples[0].data = cd_obj
-        return self.records, self.var_dict
+        return self.records, self.var_dict, self.skipped
 
 
 class VariantGroup(object):
@@ -382,7 +381,7 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
     ref = get_reference_seq(chrom, start, end, seq_dict, datasource)
     alt = ref
     alt_src = [None for x in range(0,len(alt))] # Initialize empty vector tracking which IDs the alt alleles originated from
-    unmerged = [] # List of variants that failed to merge
+    skipped = [] # List of variants that failed to merge
     agg_qual, agg_alt_af, agg_alt_dp, agg_ref_dp = 0, 0, 0, 0
 
     shift = 0
@@ -406,7 +405,7 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
             print(alt_src[upstreamsliceix:downstreamsliceix])
             if upstreamsliceix < 0: # TODO Could downstreamsliceix be < 0?
                   print("incompatible merge: " + var_id)
-                  unmerged.append(var_id)
+                  skipped.append(var_id)
                   continue
             if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
                 print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
@@ -414,7 +413,7 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
                 print
                 if any(alt_src[upstreamsliceix:downstreamsliceix]):
                   print("incompatible merge: " + var_id)
-                  unmerged.append(var_id)
+                  skipped.append(var_id)
                   continue
                 else:
                   alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
@@ -435,14 +434,14 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
             print('downstreamsliceix: ' + str(downstreamsliceix))
             if upstreamsliceix < 0:
                   print("incompatible merge: " + var_id)
-                  unmerged.append(var_id)
+                  skipped.append(var_id)
                   continue
             if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
                 print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
                 print("new alt: " + "".join(var_alt))
                 if any(alt_src[upstreamsliceix:downstreamsliceix]):
                   print("incompatible merge: " + var_id)
-                  unmerged.append(var_id)
+                  skipped.append(var_id)
                   continue
                 else:
 #                  print('old logic alt after:')
@@ -465,9 +464,9 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
         print(alt)
         print('alt_src after:')
         print(alt_src)
-    if unmerged:
+    if skipped:
         print('WARNING: could not merge all variants. The following variants were NOT merged:')
-        print(unmerged)
+        print(skipped)
     print('alt_src final:')
     print(alt_src)
 
@@ -481,7 +480,7 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
     # CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO, FORMAT, sample_indexes, samples=None
     # pylint: disable=protected-access
     return vcf.model._Record(chrom, start, variants[0].ID, ref, [alt_obj], agg_qual / nvariants, None, info,
-                             variants[0].FORMAT, variants[0]._sample_indexes, variants[0].samples)
+                             variants[0].FORMAT, variants[0]._sample_indexes, variants[0].samples), skipped
 
 
 def append_group_info(record, groups):
@@ -586,10 +585,12 @@ def get_merged_records(variant_dict, fdict, datasource):
         Return merged variant calls
     """
     records = []
+    skipped = []
     for var in variant_dict:
-        record = merge_records(variant_dict[var], var, seq_dict=fdict, datasource=datasource)
+        record, skip = merge_records(variant_dict[var], var, seq_dict=fdict, datasource=datasource)
         records.append(record)
-    return records
+        skipped.append(skip)
+    return records, skipped
 
 
 def bam_and_merge(bam_file, vars_to_group, fq_threshold, min_reads, filter_type, fdict, datasource):
@@ -597,7 +598,9 @@ def bam_and_merge(bam_file, vars_to_group, fq_threshold, min_reads, filter_type,
     if bam_file is not None:
         print('Processing bam: {}'.format(bam_file))
         vars_to_group, _ = inspect_bam(bam_file, vars_to_group, fq_threshold, min_reads, filter_type)
-    return PickleMe(get_merged_records(vars_to_group, fdict, datasource), vars_to_group)
+    merged, skipped = get_merged_records(vars_to_group, fdict, datasource)
+    return PickleMe(merged, skipped, vars_to_group)
+#    return PickleMe(get_merged_records(vars_to_group, fdict, datasource), vars_to_group)
 
 
 def write_vcf(records, var_dict, output_file, reader, original_variants, write_mode):
@@ -622,7 +625,6 @@ def write_vcf(records, var_dict, output_file, reader, original_variants, write_m
         for record in records:
             writer.write_record(record)
 
-
 def split_ref_seq(fdict, cloc, nthreads):
     """ Fix shared memory error with multiprocessing by splitting reference dictionary """
     if fdict is None:
@@ -631,7 +633,6 @@ def split_ref_seq(fdict, cloc, nthreads):
     for chrom in cloc:
         ref_array[cloc[chrom]][chrom] = fdict[chrom]
     return ref_array
-
 
 # pylint: disable=too-many-locals
 def bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads, bam_filter_mode, ref_seq, nthreads,
@@ -654,14 +655,16 @@ def bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads,
         res = [bam_and_merge(bam_file, achunk, fq_threshold, min_reads, bam_filter_mode, ref, datasource)
                for achunk, ref in zip(var_chunks, refs)]
     records = []
+    skipped = []
     var_dict = {}
     for r in res:
-        recs, var_dict_part = r.get().get_fat() if not debug and nthreads > 1 else r.get_fat()
+        recs, var_dict_part, skip = r.get().get_fat() if not debug and nthreads > 1 else r.get_fat()
         records.extend(recs)
+        skipped.extend(skip) 
         var_dict.update(var_dict_part)
     how_long = time.time() - start
     print("%d seconds to process with %d threads" % (how_long, nthreads))
-    return records, var_dict
+    return records, var_dict, skipped
 
 
 # pylint: disable=too-many-arguments,too-many-locals
