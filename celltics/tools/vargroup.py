@@ -385,8 +385,6 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
     agg_qual, agg_alt_af, agg_alt_dp, agg_ref_dp = 0, 0, 0, 0
 
     shift = 0
-    print("ref:" + str(ref))
-    print("alt:" + str(alt))
     for variant in sorted(variants, key=lambda var: int(var.POS)):
         var_len = variant.end - variant.POS + 1
         var_alt = [sub.sequence for sub in variant.ALT]
@@ -394,23 +392,14 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
         print(var_id)
         if variant.is_deletion:
             del_length = variant.end - variant.POS
-            print('del_length: ' + str(del_length))
             # BEGIN new code
             upstreamsliceix = shift + variant.POS - start
             downstreamsliceix = shift + variant.end - start + len(var_alt[0])
-            print('upstreamsliceix: ' + str(upstreamsliceix))
-            print('downstreamsliceix: ' + str(downstreamsliceix))
-            print('alt_src:')
-            print(alt_src)
-            print(alt_src[upstreamsliceix:downstreamsliceix])
-            if upstreamsliceix < 0: # TODO Could downstreamsliceix be < 0?
+            if upstreamsliceix < 0: 
                   print("incompatible merge: " + var_id)
                   skipped.append(var_id)
                   continue
             if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
-                print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
-                print("new alt: " + "".join(var_alt))
-                print
                 if any(alt_src[upstreamsliceix:downstreamsliceix]):
                   print("incompatible merge: " + var_id)
                   skipped.append(var_id)
@@ -420,7 +409,6 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
                   alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
                   shift -= del_length
             else:
-                print('ALT already has this allele')
                 continue
             # END new code
 #            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + \
@@ -430,27 +418,19 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
             # BEGIN new code
             upstreamsliceix = shift + variant.POS - start 
             downstreamsliceix = shift + variant.POS - start + var_len 
-            print('upstreamsliceix: ' + str(upstreamsliceix))
-            print('downstreamsliceix: ' + str(downstreamsliceix))
             if upstreamsliceix < 0:
-                  print("incompatible merge: " + var_id)
                   skipped.append(var_id)
                   continue
             if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
-                print("old alt: " + alt[upstreamsliceix:downstreamsliceix])
-                print("new alt: " + "".join(var_alt))
                 if any(alt_src[upstreamsliceix:downstreamsliceix]):
                   print("incompatible merge: " + var_id)
                   skipped.append(var_id)
                   continue
                 else:
-#                  print('old logic alt after:')
-#                  print(alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.end - start + len(var_alt[0]):])
                   alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
                   alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
                   shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
             else:
-                print('ALT already has this allele')
                 continue
             # END new code
 #            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.POS - start + var_len:]
@@ -460,15 +440,9 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
         agg_alt_af += variant.INFO.get('ALT_AF', 0) or 0
         agg_alt_dp += variant.INFO.get('ALT_DP', 0) or 0
         agg_ref_dp += variant.INFO.get('REF_DP', 0) or 0
-        print('alt after:')
-        print(alt)
-        print('alt_src after:')
-        print(alt_src)
     if skipped:
         print('WARNING: could not merge all variants. The following variants were NOT merged:')
         print(skipped)
-    print('alt_src final:')
-    print(alt_src)
 
     info['ALT_AF'] = agg_alt_af / len(variants)
     info['ALT_DP'] = agg_alt_dp / len(variants)
