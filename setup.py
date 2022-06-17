@@ -17,7 +17,7 @@ def load_requirements():
 setup(
     name='celltics',
     version='__version__',
-    py_modules=['celltics'],
+    py_modules=['celltics','datasource'],
     packages=find_packages(),
     url='https://github.com/MGHComputationalPathology/CellTics',
     license='BSD',
