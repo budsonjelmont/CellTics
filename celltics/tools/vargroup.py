@@ -384,54 +384,84 @@ def merge_records(variants, group_id, seq_dict=None, datasource=None):
     skipped = [] # List of variants that failed to merge
     agg_qual, agg_alt_af, agg_alt_dp, agg_ref_dp = 0, 0, 0, 0
 
-    shift = 0
+    shift = 0 # Delta of # bases inserted/deleted
     for variant in sorted(variants, key=lambda var: int(var.POS)):
         var_len = variant.end - variant.POS + 1
         var_alt = [sub.sequence for sub in variant.ALT]
         var_id = get_id(variant)
-        print(var_id)
+        upstreamsliceix = shift + variant.POS - start
         if variant.is_deletion:
-            del_length = variant.end - variant.POS
-            # BEGIN new code
-            upstreamsliceix = shift + variant.POS - start
+            del_length = variant.end - variant.POS # What if we used the length of the ref & alt here instead?
             downstreamsliceix = shift + variant.end - start + len(var_alt[0])
-            if upstreamsliceix < 0: 
-                  print("incompatible merge: " + var_id)
-                  skipped.append(var_id)
-                  continue
-            if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
-                if any(alt_src[upstreamsliceix:downstreamsliceix]):
-                  print("incompatible merge: " + var_id)
-                  skipped.append(var_id)
-                  continue
-                else:
-                  alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
-                  alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
-                  shift -= del_length
-            else:
-                continue
+        else:
+            del_length = 0
+            downstreamsliceix = shift + variant.POS - start + var_len 
+        # Check if upstream slice index is < 0, which would cause an incorrect sequence to be returned if the merge occurs. This can be true after the upstreamsliceix index is updated for a non-L/R trimmed deletion, so input should be L/R-trimmed.
+        if upstreamsliceix < 0: 
+          print("incompatible merge: " + var_id)
+          skipped.append(var_id)
+          continue
+        # If the current alt doesn't match the new alt at this position
+        if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
+           if any(alt_src[upstreamsliceix:downstreamsliceix]):
+             print("incompatible merge: " + var_id)
+             skipped.append(var_id)
+             continue
+           else:
+             # Update new alt sequence and record which variants specified the alt at each position
+             alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+             alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
+             if variant.is_deletion:
+               #shift -= del_length # o.g. value
+               #shift = 90
+               shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions (TRYING SOMETHING??)
+             else:
+               shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
+        else:
+           continue
+
+
+#        if variant.is_deletion:
+#            # BEGIN new code
+#            upstreamsliceix = shift + variant.POS - start
+#            downstreamsliceix = shift + variant.end - start + len(var_alt[0])
+#            if upstreamsliceix < 0: 
+#                  print("incompatible merge: " + var_id)
+#                  skipped.append(var_id)
+#                  continue
+#            if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
+#                if any(alt_src[upstreamsliceix:downstreamsliceix]):
+#                  print("incompatible merge: " + var_id)
+#                  skipped.append(var_id)
+#                  continue
+#                else:
+#                  alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+#                  alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
+#                  shift -= del_length
+#            else:
+#                continue
             # END new code
 #            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + \
 #                  alt[shift + variant.end - start + len(var_alt[0]):]
 #            shift -= del_length
-        else:
+#        else:
             # BEGIN new code
-            upstreamsliceix = shift + variant.POS - start 
-            downstreamsliceix = shift + variant.POS - start + var_len 
-            if upstreamsliceix < 0:
-                  skipped.append(var_id)
-                  continue
-            if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
-                if any(alt_src[upstreamsliceix:downstreamsliceix]):
-                  print("incompatible merge: " + var_id)
-                  skipped.append(var_id)
-                  continue
-                else:
-                  alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
-                  alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
-                  shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
-            else:
-                continue
+#            upstreamsliceix = shift + variant.POS - start 
+#            downstreamsliceix = shift + variant.POS - start + var_len 
+#            if upstreamsliceix < 0:
+#                  skipped.append(var_id)
+#                  continue
+#            if alt[upstreamsliceix:downstreamsliceix] != "".join(var_alt):
+#                if any(alt_src[upstreamsliceix:downstreamsliceix]):
+#                  print("incompatible merge: " + var_id)
+#                  skipped.append(var_id)
+#                  continue
+#                else:
+#                  alt = alt[:upstreamsliceix] + "".join(var_alt) + alt[downstreamsliceix:]
+#                  alt_src = alt_src[:upstreamsliceix] + [var_id] * len("".join(var_alt))  + alt_src[downstreamsliceix:]
+#                  shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
+#            else:
+#                continue
             # END new code
 #            alt = alt[:shift + variant.POS - start] + "".join(var_alt) + alt[shift + variant.POS - start + var_len:]
 #            shift += len(variant.ALT[0]) - len(variant.REF)  # for insertions
