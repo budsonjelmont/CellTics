@@ -3,7 +3,7 @@ flake8
 biopython
 nose
 pysam
-pyvcf
+pyvcf3
 xmltodict
 numpy
 pandas
