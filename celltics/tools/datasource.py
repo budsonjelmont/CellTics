@@ -3,7 +3,7 @@ from urllib.error import URLError
 from xml.parsers.expat import ExpatError
 import xmltodict
 
-class datasource:
+class DataSource:
   def __init__(self, baseurl, assembly, chr_aliases):
     self.baseurl = baseurl 
     self.assembly =  assembly
@@ -76,7 +76,7 @@ seqrepo_aliases = {'grch37':{
 }
 
 
-class SeqRepo(datasource):
+class SeqRepo(DataSource):
   def __init__(self, baseurl, assembly, chr_aliases=seqrepo_aliases):
     self.baseurl = baseurl 
     self.assembly =  assembly
@@ -115,7 +115,7 @@ class SeqRepo(datasource):
     return dna
 
 
-class UCSC(datasource):
+class UCSC(DataSource):
   
   def __init__(self, baseurl, assembly, chr_aliases=seqrepo_aliases):
     self.baseurl = baseurl # http://genome.ucsc.edu 
