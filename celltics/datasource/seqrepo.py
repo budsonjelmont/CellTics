@@ -1,4 +1,4 @@
-from .datasource import datasource
+from .datasource import DataSource
 from urllib.request import urlopen
 from urllib.error import URLError
 from xml.parsers.expat import ExpatError
@@ -62,7 +62,7 @@ seqrepo_aliases = {'grch37':{
   }
 }
 
-class SeqRepo(datasource):
+class SeqRepo(DataSource):
   def __init__(self, baseurl, assembly, chr_aliases=seqrepo_aliases):
     self.baseurl = baseurl 
     self.assembly =  assembly

@@ -1,4 +1,4 @@
-from .datasource import datasource
+from .datasource import DataSource
 from urllib.request import urlopen
 from urllib.error import URLError
 from xml.parsers.expat import ExpatError
@@ -6,7 +6,7 @@ import xmltodict
 
 # Define UCSC specific objects and data source class
 
-class UCSC(datasource):
+class UCSC(DataSource):
   
   def __init__(self, baseurl, assembly, chr_aliases=None):
     self.baseurl = baseurl # http://genome.ucsc.edu 

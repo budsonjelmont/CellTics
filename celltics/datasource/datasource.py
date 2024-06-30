@@ -1,4 +1,4 @@
-class datasource:
+class DataSource:
   def __init__(self, baseurl, assembly, chr_aliases):
     self.baseurl = baseurl 
     self.assembly =  assembly
