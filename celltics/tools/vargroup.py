@@ -583,10 +583,10 @@ def write_vcf(records, var_dict, output_file, reader, original_variants, write_m
     """
     # pylint: disable=protected-access
     reader.infos['GROUP_ID'] = vcf.parser._Info('GROUP_ID', 0, 'String', 'Group ID given by VarGrouper', 'VarGrouper',
-                                                '2.0')
+                                                '3.0', 'dummyValue')
     # pylint: disable=protected-access
     reader.infos['IN_GROUP'] = vcf.parser._Info('IN_GROUP', 0, 'String', 'VarGrouper group ID this variant was put in',
-                                                'VarGrouper', '2.0')
+                                                'VarGrouper', '3.0', 'dummyValue')
     with open(output_file, 'w+') as ovcf:
         writer = vcf.Writer(ovcf, template=reader)
         if write_mode != 'merged_only':
@@ -653,7 +653,7 @@ def main(input_file=None, output_file=None, bam_file=None, merge_distance=9, fq_
         original_variants = list(reader)
         _, vars_to_group = parse_vcf(original_variants, merge_distance, bam_file is None)
         n_candidates = len(vars_to_group)
-        records, var_dict = bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads,
+        records, var_dict, skipped = bam_and_merge_multiprocess(bam_file, vars_to_group, fq_threshold, min_reads,
                                                        bam_filter_mode, ref_seq, nthreads, debug, datasource)
         write_vcf(records, var_dict, output_file, reader, original_variants, write_mode)
     print("Found %s variants to merge\nRejected groups: %s" % (len(records), n_candidates - len(records)))

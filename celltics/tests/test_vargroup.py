@@ -12,10 +12,12 @@ import os
 import sys
 import filecmp
 import celltics.tools.vargroup as vg
+from celltics.datasource.ucsc import UCSC # Structure of imports in CellTics "dev" branch
 from celltics.lib import get_indel_from_cigar
 from pkg_resources import resource_filename
 from Bio import SeqIO
 
+ucsc_seq_source = UCSC('http://genome.ucsc.edu','hg19')
 
 def test_get_indels_from_cigar():
     """Validates that we correctly parse indels from cigar strings"""
@@ -139,7 +141,7 @@ def test_vargroup_pagb():
     vcf_out = resource_filename('celltics.tests.data.files', 'vargroup_out.vcf')
     output_file = os.path.join(os.path.dirname(vcf_out), 'vargroup_test_output_pagb.vcf')
     vg.main(input_file=vcf_in, output_file=output_file, bam_file=bam, merge_distance=1000, fq_threshold=50,
-            bam_filter_mode='max_pagb', write_mode='merged_only')
+            bam_filter_mode='max_pagb', write_mode='merged_only', datasource=ucsc_seq_source)
     assert_true(filecmp.cmp(vcf_out, output_file))
 
 
@@ -150,7 +152,7 @@ def test_vargroup_append():
     vcf_out = resource_filename('celltics.tests.data.files', 'vargroup_append_out.vcf')
     output_file = os.path.join(os.path.dirname(vcf_out), 'vargroup_test_append_output.vcf')
     vg.main(input_file=vcf_in, output_file=output_file, bam_file=bam, merge_distance=50, fq_threshold=50,
-            min_reads=3, write_mode='append', bam_filter_mode='min_pagb')
+            min_reads=3, write_mode='append', bam_filter_mode='min_pagb', datasource=ucsc_seq_source)
     assert_true(filecmp.cmp(vcf_out, output_file))
 
 
@@ -161,7 +163,7 @@ def test_vargroup():
     vcf_out = resource_filename('celltics.tests.data.files', 'vargroup_out.vcf')
     output_file = os.path.join(os.path.dirname(vcf_out), 'vargroup_test_output.vcf')
     vg.main(input_file=vcf_in, output_file=output_file, bam_file=bam, merge_distance=1000, fq_threshold=5,
-            write_mode='merged_only', bam_filter_mode='pab')
+            write_mode='merged_only', bam_filter_mode='pab', datasource=ucsc_seq_source)
     assert_true(filecmp.cmp(vcf_out, output_file))
 
 
@@ -190,3 +192,5 @@ if len(sys.argv) > 1:
     test_get_reference_seq()
     test_pagb()
     test_split_and_trim()
+elif __name__ == "__main__":
+    test_vargroup_pagb()
