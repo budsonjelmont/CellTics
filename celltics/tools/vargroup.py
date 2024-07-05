@@ -485,7 +485,7 @@ def get_reference_seq(chrom, start, end, seq_dict=None, datasource=None):
         raise Exception("Error: Could not find that sequence: %s" % str(e))
     except KeyError as e:
         print("No chromosome named: %s\nTrying external data sources..." % str(e))
-        dna = get_reference_seq(chrom, start_og, end, datasource)
+        dna = get_reference_seq(chrom, start_og, end, datasource=datasource)
     return dna.lower()
 
 def parse_vcf(reader, merge_distance, skip_overlap):

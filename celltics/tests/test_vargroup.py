@@ -173,12 +173,12 @@ def test_get_reference_seq():
     start = 1
     end = 9
     expected_seq = 'gaaggaact'
-    expected_ukn_seq = 'tgatcacagg'
+    expected_ukn_seq = 'gatcacagg'
     ref_seq = resource_filename('celltics.tests.data.files', 'mini_genome.fasta')
     mydict = SeqIO.to_dict(SeqIO.parse(ref_seq, 'fasta'))
-    reference_seq = vg.get_reference_seq(chrom, start, end, seq_dict=mydict)
+    reference_seq = vg.get_reference_seq(chrom, start, end, seq_dict=mydict, datasource=ucsc_seq_source)
     assert_equal(expected_seq, reference_seq)
-    reference_seq = vg.get_reference_seq('M', start, end, seq_dict=mydict)
+    reference_seq = vg.get_reference_seq('M', start, end, seq_dict=mydict, datasource=ucsc_seq_source)
     assert_equal(expected_ukn_seq, reference_seq)
     assert_raises(Exception, vg.get_reference_seq, chrom, 10, 11, seq_dict={'1': 'NNNNNN'})
 
@@ -193,4 +193,5 @@ if len(sys.argv) > 1:
     test_pagb()
     test_split_and_trim()
 elif __name__ == "__main__":
-    test_vargroup_pagb()
+    # Running just a single test for dev
+    test_get_reference_seq()
